@@ -22,14 +22,14 @@ export default function SignupScreen() {
     }
 
     try {
-      const response = await axios.post('http://192.168.237.229:8000/auth/signup', {
+      const response = await axios.post('https://bbd5-2409-40f4-210e-73d5-a512-73ef-5199-6000.ngrok-free.app/auth/signup', {
         name,
         email,
         password,
         confirm_password: confirmPassword,
       });
       console.log(response.status);
-      if (response.status === 401) {
+      if (response.status === 200) {
         Alert.alert('Success', 'Signup Successful! Please login.');
         router.push('/login');
       } else {

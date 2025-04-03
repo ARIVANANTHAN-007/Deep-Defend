@@ -10,7 +10,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     try {
-      const response = await axios.post('http://192.168.237.229:8000/auth/login', {
+      const response = await axios.post('https://bbd5-2409-40f4-210e-73d5-a512-73ef-5199-6000.ngrok-free.app/auth/login', {
         email,
         password,
       });
@@ -51,7 +51,7 @@ export default function LoginScreen() {
       />
 
       {/* Login Button */}
-      <TouchableOpacity style={styles.button} onPress={() => router.push('/dashboard')}>
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
 
