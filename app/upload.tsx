@@ -1,49 +1,128 @@
 "use client"
 
 import { useState } from "react"
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Image, FlatList } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, FlatList, Platform, Alert } from "react-native"
 import { ArrowLeft, Upload, File, CheckCircle, AlertTriangle, X } from "react-native-feather"
 import { useNavigation } from "@react-navigation/native"
+import * as DocumentPicker from "expo-document-picker"
+import BASE_URL from "../lib/config"; // Adjust the import path as necessary
 
 export default function UploadScreen() {
   const navigation = useNavigation()
   const [modalVisible, setModalVisible] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<{ name: string; size: string; type: string } | null>(null)
-  const [scanStatus, setScanStatus] = useState<null | 'scanning' | 'safe' | 'threat'>(null) // null, 'scanning', 'safe', 'threat'
+  const [selectedFile, setSelectedFile] = useState<{ name: string; size: string; type: string; uri: string } | null>(
+    null,
+  )
+  const [scanStatus, setScanStatus] = useState<null | "scanning" | "safe" | "threat">(null) // null, 'scanning', 'safe', 'threat'
+  const [uploading, setUploading] = useState(false)
   const [recentFiles, setRecentFiles] = useState([
     { id: "1", name: "Financial Report.pdf", date: "2 days ago", status: "safe" },
     { id: "2", name: "Contract Draft.pdf", date: "1 week ago", status: "safe" },
+    { id: "3", name: "Malware Sample.pdf", date: "1 month ago", status: "threat" },
   ])
 
-  const handleFileSelect = () => {
-    // Simulate file selection
-    setSelectedFile({
-      name: "Document.pdf",
-      size: "2.4 MB",
-      type: "application/pdf",
-    })
-    setModalVisible(false)
+  const handleFileSelect = async () => {
+    try {
+      // Use document picker to select a file
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["application/pdf"], // Limit to PDF files
+        copyToCacheDirectory: true,
+      })
 
-    // Simulate scanning process
-    setScanStatus("scanning")
-    setTimeout(() => {
-      // 80% chance of safe, 20% chance of threat for demo purposes
-      const result = Math.random() > 0.2 ? "safe" : "threat"
-      setScanStatus(result)
+      if (result.canceled) {
+        // User canceled the picker
+        setModalVisible(false)
+        return
+      }
 
-      if (result === "safe") {
-        // Add to recent files if safe
+      const fileInfo = result.assets[0]
+
+      // Format file size
+      const fileSizeInBytes = fileInfo.size || 0
+      const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2)
+
+      setSelectedFile({
+        name: fileInfo.name,
+        size: `${fileSizeInMB} MB`,
+        type: fileInfo.mimeType || "application/pdf",
+        uri: fileInfo.uri,
+      })
+
+      setModalVisible(false)
+
+      // Start scanning process
+      setScanStatus("scanning")
+
+      // Send file to backend for scanning and upload
+      uploadAndScanFile(fileInfo.uri, fileInfo.name)
+    } catch (error) {
+      console.error("Error picking document:", error)
+      Alert.alert("Error", "Failed to select document")
+      setModalVisible(false)
+    }
+  }
+
+  const uploadAndScanFile = async (fileUri: string, fileName: string) => {
+    try {
+      setUploading(true)
+
+      // Create form data for multipart/form-data request
+      const formData = new FormData()
+
+      // Add file to form data
+      formData.append("file", {
+        uri: Platform.OS === "ios" ? fileUri.replace("file://", "") : fileUri,
+        name: fileName,
+        type: "application/pdf",
+      } as any)
+
+      // Upload file to API endpoint
+      const response = await fetch(
+        `${BASE_URL}/dashboard/upload`,
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        },
+      )
+      
+      console.log("Response status:", response.status);
+      
+      // Check response status to determine if file is safe or a threat
+      if (response.status === 400) {
+        // Status code 400 indicates a malicious file (threat)
+        setScanStatus("threat")
+      } else if (response.ok) {
+        // Status code 200-299 indicates successful upload (safe file)
+        setScanStatus("safe")
+        
+        // Add to recent files if upload successful
         setRecentFiles([
           {
             id: Date.now().toString(),
-            name: "Document.pdf",
+            name: fileName,
             date: "Just now",
             status: "safe",
           },
           ...recentFiles,
         ])
+
+        console.log("File uploaded successfully")
+      } else {
+        // Handle other error cases
+        console.error("Upload failed:", await response.text())
+        Alert.alert("Upload Failed", "Failed to upload the file to the server")
+        resetUpload()
       }
-    }, 3000)
+    } catch (error) {
+      console.error("Error uploading file:", error)
+      Alert.alert("Upload Error", "An error occurred while uploading the file")
+      resetUpload()
+    } finally {
+      setUploading(false)
+    }
   }
 
   const resetUpload = () => {
@@ -123,7 +202,10 @@ export default function UploadScreen() {
                 <Text style={styles.resultText}>
                   No malicious content detected. Your file has been uploaded securely.
                 </Text>
-                <TouchableOpacity style={styles.actionButton} onPress={resetUpload}>
+                <TouchableOpacity
+                  style={[styles.actionButton]}
+                  onPress={resetUpload}
+                >
                   <Text style={styles.actionButtonText}>Upload Another File</Text>
                 </TouchableOpacity>
               </View>
@@ -183,20 +265,6 @@ export default function UploadScreen() {
                   <File stroke="#FFD700" width={24} height={24} />
                 </View>
                 <Text style={styles.fileOptionText}>Browse Files</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.fileOption} onPress={handleFileSelect}>
-                <View style={styles.fileOptionIcon}>
-                  <Image source={{ uri: "https://via.placeholder.com/24" }} style={styles.fileOptionImage} />
-                </View>
-                <Text style={styles.fileOptionText}>Google Drive</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.fileOption} onPress={handleFileSelect}>
-                <View style={styles.fileOptionIcon}>
-                  <Image source={{ uri: "https://via.placeholder.com/24" }} style={styles.fileOptionImage} />
-                </View>
-                <Text style={styles.fileOptionText}>Dropbox</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -361,10 +429,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 15,
   },
-  fileOptionImage: {
-    width: 24,
-    height: 24,
-  },
   fileOptionText: {
     color: "white",
     fontSize: 16,
@@ -470,10 +534,12 @@ const styles = StyleSheet.create({
   threatButton: {
     backgroundColor: "#FF3D00",
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   actionButtonText: {
     color: "black",
     fontSize: 16,
     fontWeight: "600",
   },
 })
-
