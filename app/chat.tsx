@@ -1,37 +1,74 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native"
+import { useEffect, useRef, useState } from "react"
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  FlatList,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from "react-native"
-import { ArrowLeft, Send, File, X, Plus, MessageSquare } from "react-native-feather"
-import { useNavigation } from "@react-navigation/native"
+import { ArrowLeft, File, MessageSquare, Plus, Send, X } from "react-native-feather"
+import BASE_URL from "../lib/config"; // Adjust the import path as necessary
 
 // Sample messages for the chat
 const initialMessages = [
   {
     id: "1",
     type: "system",
-    text: "Welcome to DeepDefend PDF Chatbot. Upload a PDF to ask questions about it.",
+    text: "Welcome to DeepDefend PDF Chatbot. Select a PDF to ask questions about it.",
   },
 ]
 
+// Define types for route params
+type ChatbotScreenParams = {
+  file?: {
+    name: string;
+  };
+};
+
 export default function ChatbotScreen() {
   const navigation = useNavigation()
+  const route = useRoute<RouteProp<Record<string, ChatbotScreenParams>, string>>()
   const [messages, setMessages] = useState(initialMessages)
   const [inputText, setInputText] = useState("")
   const [modalVisible, setModalVisible] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<{ name: string; size: string; type: string } | null>(null)
+  const [selectedFile, setSelectedFile] = useState<{ name: string } | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [availableFiles, setAvailableFiles] = useState<Array<{
+    name: string;
+    size?: number;
+    indexed?: boolean;
+  }>>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false)
   const flatListRef = useRef<FlatList>(null)
+
+  // Check if a file was passed from the upload screen
+  useEffect(() => {
+    if (route.params && route.params.file) {
+      const file = route.params.file
+      setSelectedFile({
+        name: file.name,
+      })
+
+      // Add system message about the file
+      const fileMessage = {
+        id: Date.now().toString(),
+        type: "system",
+        text: `File "${file.name}" selected. You can now ask questions about this document.`,
+      }
+
+      setMessages((prev) => [...prev, fileMessage])
+    }
+  }, [route.params])
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -39,9 +76,58 @@ export default function ChatbotScreen() {
       flatListRef.current.scrollToEnd({ animated: true })
     }
   }, [messages])
+  const fetchAvailableFiles = async () => {
+    setIsLoadingFiles(true);
+    try {
+      const response = await fetch(`${BASE_URL}/dashboard/files`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+  
+      if (!response.ok) {
+        throw new Error(`Failed to fetch files: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      
+      // Extract file data from the response
+      if (data.files && Array.isArray(data.files)) {
+        // Map the files to the format our app expects
+        interface FileData {
+          file_name: string;
+          file_size: number;
+          indexed: boolean;
+        }
 
-  const handleSend = () => {
-    if (inputText.trim() === "") return
+        interface AvailableFile {
+          name: string;
+          size: number;
+          indexed: boolean;
+        }
+
+        const files: AvailableFile[] = data.files.map((file: FileData) => ({
+          name: file.file_name,
+          size: file.file_size,
+          indexed: file.indexed,
+        }));
+        setAvailableFiles(files);
+      } else {
+        console.error("Unexpected response format:", data);
+        setAvailableFiles([]);
+      }
+    } catch (error) {
+      console.error("Error fetching files:", error);
+      Alert.alert("Error", "Failed to fetch available files");
+      setAvailableFiles([]);
+    } finally {
+      setIsLoadingFiles(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (inputText.trim() === "" || !selectedFile) return
 
     // Add user message
     const userMessage = {
@@ -51,62 +137,99 @@ export default function ChatbotScreen() {
     }
 
     setMessages((prev) => [...prev, userMessage])
+    const query = inputText
     setInputText("")
+    setIsLoading(true)
 
-    // Simulate bot response after a delay
-    setTimeout(() => {
-      let botResponse
+    try {
+      // Call the chat API endpoint
+      const response = await fetch(
+        `${BASE_URL}/dashboard/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            file_name: selectedFile.name,
+            query: query,
+          }),
+        },
+      )
 
-      if (!selectedFile) {
-        botResponse = {
-          id: (Date.now() + 1).toString(),
-          type: "bot",
-          text: "Please upload a PDF document first so I can answer questions about it.",
-        }
-      } else {
-        botResponse = {
-          id: (Date.now() + 1).toString(),
-          type: "bot",
-          text: `Based on the content of ${selectedFile.name}, I can provide the following information: This is a simulated response as if I've analyzed the document. The document contains information about financial projections, market analysis, and strategic planning for the next fiscal year.`,
-        }
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+      console.log(response);
+      // First, get the response text
+      const data = await response.text();
+
+      // Parse the JSON if the response is in JSON format
+      let parsedData;
+      try {
+        parsedData = JSON.parse(data);
+      } catch (error) {
+        console.error("Error parsing JSON:", error);
+        // Handle non-JSON response
+        parsedData = { text: data };
       }
 
+      // Create a structured bot response
+      const botResponse = {
+        id: (Date.now() + 1).toString(),
+        type: "bot",
+        text: parsedData.response || parsedData.text || data,
+      };
+
+      console.log("Bot response:", botResponse);
       setMessages((prev) => [...prev, botResponse])
-    }, 1000)
+        } catch (error) {
+      console.error("Error calling chat API:", error)
+
+      // Add error message
+      const errorMessage = {
+        id: (Date.now() + 1).toString(),
+        type: "bot",
+        text: "Sorry, I encountered an error processing your request. Please try again later.",
+      }
+
+      setMessages((prev) => [...prev, errorMessage])
+      Alert.alert("Error", "Failed to get a response from the server")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleFileSelect = () => {
-    // Simulate file selection
-    const newFile = {
-      name: "Business Report.pdf",
-      size: "3.2 MB",
-      type: "application/pdf",
-    }
-
-    setSelectedFile(newFile)
+  const handleSelectFile = (file: { name: string }) => {
+    setSelectedFile(file)
     setModalVisible(false)
 
     // Add system message about the file
     const fileMessage = {
       id: Date.now().toString(),
       type: "system",
-      text: `File "${newFile.name}" uploaded successfully. You can now ask questions about this document.`,
+      text: `File "${file.name}" selected. You can now ask questions about this document.`,
     }
 
     setMessages((prev) => [...prev, fileMessage])
   }
 
+  const openFileSelector = () => {
+    fetchAvailableFiles()
+    setModalVisible(true)
+  }
+
   type Message = {
-    id: string;
-    type: "user" | "bot" | "system";
-    text: string;
-  };
+    id: string
+    type: "user" | "bot" | "system"
+    text: string
+  }
+
   const normalizedMessages: Message[] = messages.map((msg) => ({
     ...msg,
     type: msg.type === "system" || msg.type === "user" || msg.type === "bot" ? msg.type : "user", // Default to "user"
-  }));
-  
-  
+  }))
+
   const renderMessage = ({ item }: { item: Message }) => {
     switch (item.type) {
       case "user":
@@ -139,6 +262,15 @@ export default function ChatbotScreen() {
     }
   }
 
+  const renderFileItem = ({ item }: { item: { name: string } }) => (
+    <TouchableOpacity style={styles.fileItem} onPress={() => handleSelectFile(item)}>
+      <View style={styles.fileOptionIcon}>
+        <File stroke="#FFD700" width={24} height={24} />
+      </View>
+      <Text style={styles.fileItemText}>{item.name}</Text>
+    </TouchableOpacity>
+  )
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -148,7 +280,7 @@ export default function ChatbotScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>PDF Chatbot</Text>
         {selectedFile && (
-          <TouchableOpacity style={styles.fileButton} onPress={() => setModalVisible(true)}>
+          <TouchableOpacity style={styles.fileButton} onPress={openFileSelector}>
             <File stroke="#FFD700" width={20} height={20} />
           </TouchableOpacity>
         )}
@@ -173,14 +305,21 @@ export default function ChatbotScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesList}
         showsVerticalScrollIndicator={false}
-        />
+      />
 
+      {/* Loading Indicator */}
+      {isLoading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#FFD700" />
+          <Text style={styles.loadingText}>Processing your question...</Text>
+        </View>
+      )}
 
       {/* Input Area */}
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={100}>
         <View style={styles.inputContainer}>
           {!selectedFile && (
-            <TouchableOpacity style={styles.uploadButton} onPress={() => setModalVisible(true)}>
+            <TouchableOpacity style={styles.uploadButton} onPress={openFileSelector}>
               <Plus stroke="#FFD700" width={24} height={24} />
             </TouchableOpacity>
           )}
@@ -193,11 +332,18 @@ export default function ChatbotScreen() {
             multiline
           />
           <TouchableOpacity
-            style={[styles.sendButton, inputText.trim() === "" ? styles.sendButtonDisabled : {}]}
+            style={[
+              styles.sendButton,
+              inputText.trim() === "" || !selectedFile || isLoading ? styles.sendButtonDisabled : {},
+            ]}
             onPress={handleSend}
-            disabled={inputText.trim() === ""}
+            disabled={inputText.trim() === "" || !selectedFile || isLoading}
           >
-            <Send stroke={inputText.trim() === "" ? "#555555" : "#000000"} width={20} height={20} />
+            <Send
+              stroke={inputText.trim() === "" || !selectedFile || isLoading ? "#555555" : "#000000"}
+              width={20}
+              height={20}
+            />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -218,28 +364,23 @@ export default function ChatbotScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.fileOptions}>
-              <TouchableOpacity style={styles.fileOption} onPress={handleFileSelect}>
-                <View style={styles.fileOptionIcon}>
-                  <File stroke="#FFD700" width={24} height={24} />
-                </View>
-                <Text style={styles.fileOptionText}>Browse Files</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.fileOption} onPress={handleFileSelect}>
-                <View style={styles.fileOptionIcon}>
-                  <File stroke="#FFD700" width={24} height={24} />
-                </View>
-                <Text style={styles.fileOptionText}>Recent Documents</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.fileOption} onPress={handleFileSelect}>
-                <View style={styles.fileOptionIcon}>
-                  <File stroke="#FFD700" width={24} height={24} />
-                </View>
-                <Text style={styles.fileOptionText}>Sample Documents</Text>
-              </TouchableOpacity>
-            </View>
+            {isLoadingFiles ? (
+              <View style={styles.loadingFilesContainer}>
+                <ActivityIndicator size="large" color="#FFD700" />
+                <Text style={styles.loadingFilesText}>Loading files...</Text>
+              </View>
+            ) : availableFiles.length > 0 ? (
+              <FlatList
+                data={availableFiles}
+                renderItem={renderFileItem}
+                keyExtractor={(item, index) => `file-${index}`}
+                contentContainerStyle={styles.filesList}
+              />
+            ) : (
+              <View style={styles.noFilesContainer}>
+                <Text style={styles.noFilesText}>No PDF files available</Text>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -355,6 +496,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 15,
   },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 20,
+    marginHorizontal: 20,
+    marginBottom: 10,
+  },
+  loadingText: {
+    color: "#CCCCCC",
+    marginLeft: 10,
+    fontSize: 14,
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -406,6 +562,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     padding: 20,
     minHeight: 300,
+    maxHeight: "70%",
   },
   modalHeader: {
     flexDirection: "row",
@@ -421,15 +578,20 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     padding: 5,
   },
-  fileOptions: {
-    marginTop: 20,
+  filesList: {
+    paddingBottom: 20,
   },
-  fileOption: {
+  fileItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#2A2A2A",
+  },
+  fileItemText: {
+    color: "white",
+    fontSize: 16,
+    flex: 1,
   },
   fileOptionIcon: {
     width: 50,
@@ -440,9 +602,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 15,
   },
-  fileOptionText: {
-    color: "white",
+  loadingFilesContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200,
+  },
+  loadingFilesText: {
+    color: "#CCCCCC",
+    marginTop: 15,
+    fontSize: 16,
+  },
+  noFilesContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200,
+  },
+  noFilesText: {
+    color: "#AAAAAA",
     fontSize: 16,
   },
 })
-
