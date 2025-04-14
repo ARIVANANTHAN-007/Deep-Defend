@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
 import axios from 'axios';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import BASE_URL from "../lib/config"; // Adjust the import path as necessary
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function SignupScreen() {
     }
 
     try {
-      const response = await axios.post('https://bbd5-2409-40f4-210e-73d5-a512-73ef-5199-6000.ngrok-free.app/auth/signup', {
+      const response = await axios.post(`${BASE_URL}/auth/signup`, {
         name,
         email,
         password,
