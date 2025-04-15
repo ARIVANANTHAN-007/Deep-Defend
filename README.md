@@ -6,8 +6,7 @@
 
 ## ✨ Features
 
-- 📱 **Cross-Platform**: Runs smoothly on **iOS**, **Android**, and **Web**
-- 🌗 **Theme Support**: Automatic **light/dark mode** detection and switching
+- 📱 **Platform**: Runs smoothly on **Android** 
 - 🎨 **Modern UI**: Built with **shadcn UI** components for React Native
 - 📄 **PDF Management**: View, organize, and interact with PDF documents effortlessly
 
