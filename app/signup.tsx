@@ -5,7 +5,6 @@ import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } fro
 import BASE_URL from "../lib/config"; // Adjust the import path as necessary
 
 export default function SignupScreen() {
-  const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

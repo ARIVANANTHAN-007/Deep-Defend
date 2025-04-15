@@ -1,76 +1,104 @@
 "use client"
 
 import { useState } from "react"
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, FlatList, Image } from "react-native"
-import { Search, ArrowLeft, Filter, File, Clock } from "react-native-feather"
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  FlatList,
+  ActivityIndicator,
+} from "react-native"
+import { Search, ArrowLeft, File } from "react-native-feather"
 import { useNavigation } from "@react-navigation/native"
+import { useRouter } from 'expo-router';
+import BASE_URL from "../lib/config"; // Adjust the import path as necessary
 
-// Sample data for search results
-const sampleResults = [
-  {
-    id: "1",
-    title: "Financial Report 2023.pdf",
-    preview: "Contains quarterly financial data and projections...",
-    date: "2 days ago",
-  },
-  {
-    id: "2",
-    title: "Project Proposal.pdf",
-    preview: "Detailed project timeline and resource allocation...",
-    date: "1 week ago",
-  },
-  {
-    id: "3",
-    title: "Legal Contract.pdf",
-    preview: "Terms and conditions for the partnership agreement...",
-    date: "2 weeks ago",
-  },
-  {
-    id: "4",
-    title: "Meeting Minutes.pdf",
-    preview: "Discussion points from the board meeting on March 15...",
-    date: "1 month ago",
-  },
-]
+
+// Define the types for our API response
+interface SearchMatch {
+  file_name: string
+  snippet: string
+  score: number
+}
+
+interface SearchResponse {
+  matches: SearchMatch[]
+}
 
 export default function SearchScreen() {
   const navigation = useNavigation()
   const [searchQuery, setSearchQuery] = useState("")
-  const [results, setResults] = useState(sampleResults)
+  const [results, setResults] = useState<SearchMatch[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [recentSearches, setRecentSearches] = useState<string[]>([
 
-interface SearchResult {
-    id: string
-    title: string
-    preview: string
-    date: string
-}
+  ])
+  const router = useRouter();
 
-const handleSearch = (text: string): void => {
-    setSearchQuery(text)
-    // Filter results based on search query
-    if (text) {
-        const filtered: SearchResult[] = sampleResults.filter(
-            (item) =>
-                item.title.toLowerCase().includes(text.toLowerCase()) ||
-                item.preview.toLowerCase().includes(text.toLowerCase()),
-        )
-        setResults(filtered)
-    } else {
-        setResults(sampleResults)
+
+  // Function to call the backend API
+  const searchPdfs = async (query: string) => {
+    console.log("Searching PDFs with query:", query)
+    if (!query.trim()) {
+      setResults([])
+      return
     }
-}
 
-  const renderItem = ({ item }: { item: { id: string; title: string; preview: string; date: string } }) => (
-    <TouchableOpacity style={styles.resultItem}>
+    setIsLoading(true)
+    try {
+      const response = await fetch(`${BASE_URL}/dashboard/search`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Search request failed")
+      }
+
+      const data: SearchResponse = await response.json()
+      setResults(data.matches)
+
+      // Add to recent searches if not already there
+      if (!recentSearches.includes(query) && query.trim()) {
+        setRecentSearches((prev) => [query, ...prev.slice(0, 2)])
+      }
+    } catch (error) {
+      console.error("Error searching PDFs:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSearch = (text: string) => {
+    setSearchQuery(text)
+  }
+
+  const handleSubmitSearch = () => {
+    searchPdfs(searchQuery)
+  }
+
+  const handleRecentSearch = (query: string) => {
+    setSearchQuery(query)
+    searchPdfs(query)
+  }
+
+
+  const renderItem = ({ item }: { item: SearchMatch }) => (
+    <TouchableOpacity style={styles.resultItem} onPress={() => {}}>
       <View style={styles.fileIconContainer}>
         <File stroke="#FFD700" width={24} height={24} />
       </View>
       <View style={styles.resultContent}>
-        <Text style={styles.resultTitle}>{item.title}</Text>
-        <Text style={styles.resultPreview}>{item.preview}</Text>
+        <Text style={styles.resultTitle}>{item.file_name}</Text>
+        <Text style={styles.resultPreview}>{item.snippet}</Text>
         <View style={styles.resultMeta}>
-          <Clock stroke="#AAAAAA" width={12} height={12} />
-          <Text style={styles.resultDate}>{item.date}</Text>
+          <Text style={styles.resultScore}>Score: {(item.score * 100).toFixed(1)}%</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -96,47 +124,53 @@ const handleSearch = (text: string): void => {
             placeholderTextColor="#AAAAAA"
             value={searchQuery}
             onChangeText={handleSearch}
+            onSubmitEditing={handleSubmitSearch}
+            returnKeyType="search"
           />
         </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <Filter stroke="#FFD700" width={20} height={20} />
+        <TouchableOpacity style={styles.searchButton} onPress={handleSubmitSearch}>
+          <Text style={styles.searchButtonText}>Search</Text>
         </TouchableOpacity>
       </View>
 
       {/* Recent Searches */}
-      {!searchQuery && (
+      {!results.length && !isLoading && (
         <View style={styles.recentContainer}>
           <Text style={styles.sectionTitle}>Recent Searches</Text>
           <View style={styles.recentTags}>
-            <TouchableOpacity style={styles.recentTag}>
-              <Text style={styles.recentTagText}>financial data</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.recentTag}>
-              <Text style={styles.recentTagText}>contract terms</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.recentTag}>
-              <Text style={styles.recentTagText}>project timeline</Text>
-            </TouchableOpacity>
+            {recentSearches.map((tag, index) => (
+              <TouchableOpacity key={index} style={styles.recentTag} onPress={() => handleRecentSearch(tag)}>
+                <Text style={styles.recentTagText}>{tag}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       )}
 
       {/* Results */}
       <View style={styles.resultsContainer}>
-        {searchQuery ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FFD700" />
+            <Text style={styles.loadingText}>Searching documents...</Text>
+          </View>
+        ) : results.length > 0 ? (
           <>
             <Text style={styles.sectionTitle}>Results ({results.length})</Text>
             <FlatList
               data={results}
               renderItem={renderItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item, index) => `${item.file_name}-${index}`}
               contentContainerStyle={styles.resultsList}
               showsVerticalScrollIndicator={false}
             />
           </>
+        ) : searchQuery ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No results found. Try different keywords.</Text>
+          </View>
         ) : (
           <View style={styles.emptyState}>
-            <Image source={{ uri: "https://via.placeholder.com/150" }} style={styles.emptyStateImage} />
             <Text style={styles.emptyStateText}>Enter keywords to search through your PDF documents</Text>
           </View>
         )}
@@ -184,6 +218,19 @@ const styles = StyleSheet.create({
     color: "white",
     marginLeft: 10,
     fontSize: 16,
+  },
+  searchButton: {
+    backgroundColor: "#FFD700",
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+    paddingHorizontal: 15,
+    height: 50,
+  },
+  searchButtonText: {
+    color: "#121212",
+    fontWeight: "bold",
   },
   filterButton: {
     width: 50,
@@ -259,6 +306,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+  resultScore: {
+    color: "#FFD700",
+    fontSize: 12,
+  },
   resultDate: {
     color: "#AAAAAA",
     fontSize: 12,
@@ -270,10 +321,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 40,
   },
-  emptyStateImage: {
-    width: 150,
-    height: 150,
-    marginBottom: 20,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "#CCCCCC",
+    marginTop: 15,
+    fontSize: 16,
   },
   emptyStateText: {
     color: "#AAAAAA",
@@ -282,4 +338,3 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 })
-

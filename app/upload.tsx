@@ -16,9 +16,7 @@ export default function UploadScreen() {
   const [scanStatus, setScanStatus] = useState<null | "scanning" | "safe" | "threat">(null) // null, 'scanning', 'safe', 'threat'
   const [uploading, setUploading] = useState(false)
   const [recentFiles, setRecentFiles] = useState([
-    { id: "1", name: "Financial Report.pdf", date: "2 days ago", status: "safe" },
-    { id: "2", name: "Contract Draft.pdf", date: "1 week ago", status: "safe" },
-    { id: "3", name: "Malware Sample.pdf", date: "1 month ago", status: "threat" },
+    { id: "1", name: "Guide Wire", date: "Yesterday", status: "safe" },
   ])
 
   const handleFileSelect = async () => {
