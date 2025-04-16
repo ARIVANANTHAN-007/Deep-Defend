@@ -1,7 +1,8 @@
 # 🚀 AdvPDF
 
-**PDF-BOT** is a modern, cross-platform PDF management application built with **React Native**, **Expo**, and **NativeWind**. It delivers a sleek and responsive UI with full support for light and dark themes — perfect for managing your PDF files on any device.
+AdvPDF is a sleek, mobile-first PDF management app built using React Native and Expo. Designed for Android platforms, it offers a modern, responsive interface with support for both light and dark themes. Users can view, organize, and interact with PDFs seamlessly using an intuitive UI powered by shadcn UI and NativeWind (TailwindCSS for React Native).
 
+Under the hood, AdvPDF utilizes a powerful tech stack including React Navigation and Expo Router for smooth screen transitions, Zustand for state management, and react-native-pdf for native PDF viewing. Enhanced with Reanimated animations, the app ensures a fluid and engaging user experience, making PDF handling effortless on mobile devices.
 ---
 
 ## ✨ Features
@@ -24,17 +25,7 @@
 
 ---
 
-## 🧩 UI Components
 
-AdvPDF comes with a library of polished UI components:
-
-- Avatar  
-- Button  
-- Card  
-- Progress Indicators  
-- Tooltips  
-- Themed Text  
-- ...and more!
 
 ---
 
