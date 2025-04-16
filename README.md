@@ -12,13 +12,6 @@
 
 ---
 
-## 📸 Screenshots
-
-<!-- Add screenshots here -->
-*Coming soon...*
-
----
-
 ## 🛠️ Tech Stack
 
 - **React Native** & **Expo** – Cross-platform development
